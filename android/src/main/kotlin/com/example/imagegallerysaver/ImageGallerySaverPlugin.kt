@@ -16,41 +16,25 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 
-class ImageGallerySaverPlugin(private val registrar: Registrar): MethodCallHandler {
+class ImageGallerySaverPlugin(private val registrar: PluginRegistry.Registrar) : MethodChannel.MethodCallHandler, FlutterPlugin {
+  private var context: Context? = null
+  private var channel: MethodChannel? = null
 
   companion object {
     @JvmStatic
-    fun registerWith(registrar: Registrar) {
+    fun registerWith(registrar: PluginRegistry.Registrar) {
       val channel = MethodChannel(registrar.messenger(), "image_gallery_saver")
       channel.setMethodCallHandler(ImageGallerySaverPlugin(registrar))
     }
   }
 
-  override fun onMethodCall(call: MethodCall, result: Result): Unit {
-    when {
-        call.method == "saveImageToGallery" -> {
-          val image = call.argument<ByteArray>("imageBytes") ?: return
-          val quality = call.argument<Int>("quality") ?: return
-          val name = call.argument<String>("name")
-
-          result.success(saveImageToGallery(BitmapFactory.decodeByteArray(image,0,image.size), quality, name))
-        }
-        call.method == "saveFileToGallery" -> {
-          val path = call.arguments as String
-          result.success(saveFileToGallery(path))
-        }
-        else -> result.notImplemented()
-    }
-
-  }
-
   private fun generateFile(extension: String = "", name: String? = null): File {
-    val storePath =  Environment.getExternalStorageDirectory().absolutePath + File.separator + getApplicationName()
+    val storePath = Environment.getExternalStorageDirectory().absolutePath + File.separator + getApplicationName()
     val appDir = File(storePath)
     if (!appDir.exists()) {
       appDir.mkdir()
     }
-    var fileName = name?:System.currentTimeMillis().toString()
+    var fileName = name ?: System.currentTimeMillis().toString()
     if (extension.isNotEmpty()) {
       fileName += (".$extension")
     }
@@ -96,7 +80,7 @@ class ImageGallerySaverPlugin(private val registrar: Registrar): MethodCallHandl
     val context = registrar.activeContext().applicationContext
     var ai: ApplicationInfo? = null
     try {
-        ai = context.packageManager.getApplicationInfo(context.packageName, 0)
+      ai = context.packageManager.getApplicationInfo(context.packageName, 0)
     } catch (e: PackageManager.NameNotFoundException) {
     }
     var appName: String
@@ -106,7 +90,35 @@ class ImageGallerySaverPlugin(private val registrar: Registrar): MethodCallHandl
     } else {
       "image_gallery_saver"
     }
-    return  appName
+    return appName
+  }
+
+  override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+    channel = MethodChannel(binding.binaryMessenger, "image_gallery_saver")
+    context = binding.applicationContext
+    channel!!.setMethodCallHandler(this)
+  }
+
+  override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+    channel?.setMethodCallHandler(null)
+    channel = null
+  }
+
+  override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+    when {
+      call.method == "saveImageToGallery" -> {
+        val image = call.argument<ByteArray>("imageBytes") ?: return
+        val quality = call.argument<Int>("quality") ?: return
+        val name = call.argument<String>("name")
+
+        result.success(saveImageToGallery(BitmapFactory.decodeByteArray(image, 0, image.size), quality, name))
+      }
+      call.method == "saveFileToGallery" -> {
+        val path = call.arguments as String
+        result.success(saveFileToGallery(path))
+      }
+      else -> result.notImplemented()
+    }
   }
 
 
